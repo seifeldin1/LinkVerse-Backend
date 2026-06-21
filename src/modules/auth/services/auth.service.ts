@@ -1,8 +1,8 @@
 import bcrypt from 'bcrypt';
-import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
+import jwt, {  SignOptions } from 'jsonwebtoken';
 import { AuthRepository } from '../repositories/auth.repository';
 import { RegisterDTO , LoginDTO , AuthTokens , Payload } from '../types/auth.types';
-import { response } from 'express';
+
 
 export class AuthService {
     private authRepository = new AuthRepository();
@@ -16,12 +16,10 @@ export class AuthService {
         if(existingUsername)
             throw new Error("Username already exists")
 
-        if(email){
-            const existingEmail = await this.authRepository.findUserByEmail(email)
-            if(existingEmail)
-                throw new Error("Email already exists")
-        }
-
+        const existingEmail = await this.authRepository.findUserByEmail(email)
+        if(existingEmail)
+            throw new Error("Email already exists")
+        
         const hashedPassword = await bcrypt.hash(password, 20)
         await this.authRepository.createUser(username , hashedPassword , email);
     }
@@ -43,7 +41,7 @@ export class AuthService {
         }
 
         const {accessToken , refreshToken} = this.generateToken(payload)
-        this.authRepository.updateRefreshToken(user.id , refreshToken)
+        await this.authRepository.updateRefreshToken(user.id , refreshToken)
         return {accessToken , refreshToken}
     }
 
@@ -57,7 +55,7 @@ export class AuthService {
         } catch(err){
             throw new Error("Invalid refresh token")
         }
-        const user = await this.authRepository.findUserByUsername(payload.username)
+        const user = await this.authRepository.findUs(payload.username)
         if(!user || refreshToken !== user.refreshToken)
             throw new Error("Invalid refresh token")
         const newPayload : Payload = {
