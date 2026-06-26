@@ -2,7 +2,9 @@ import bcrypt from 'bcrypt';
 import jwt, {  SignOptions } from 'jsonwebtoken';
 import { AuthRepository } from '../repositories/auth.repository';
 import { RegisterDTO , LoginDTO , AuthTokens , Payload } from '../types/auth.types';
-
+import { ConflictError} from '../../../errors/Conflict';
+import { BadRequestError} from '../../../errors/BadRequest';
+import { UnauthorizedError} from '../../../errors/Unauthorized';
 
 export class AuthService {
     private authRepository = new AuthRepository();
@@ -13,11 +15,11 @@ export class AuthService {
         const password = data.password
         const existingUsername = await this.authRepository.findUserByUsername(username)
         if(existingUsername)
-            throw new Error("Username already exists")
+            throw new ConflictError("Username already exists")
 
         const existingEmail = await this.authRepository.findUserByEmail(email)
         if(existingEmail)
-            throw new Error("Email already exists")
+            throw new ConflictError("Email already exists")
         
         const hashedPassword = await bcrypt.hash(password, 20)
         await this.authRepository.createUser(username , hashedPassword , email);
@@ -26,17 +28,16 @@ export class AuthService {
     async login(data:LoginDTO) : Promise<AuthTokens>{
         const identifier = data.identifier
         const password = data.password
-        const user = await this.authRepository.findUserByUsername(identifier) || await this.authRepository.findUserByEmail(identifier)
+        const user = await this.authRepository.findUserByIdentifier(identifier)
         if(!user)
-            throw new Error("Invalid Email or Username")
+            throw new UnauthorizedError("Invalid Email or Username")
 
         const passwordMatch = await bcrypt.compare(password , user.password)
         if(!passwordMatch)
-            throw new Error("Incorrect Password")
+            throw new UnauthorizedError("Incorrect Password")
         const payload:Payload ={
             userId: user.id.toString(),
-            username: user.username,
-            iat: Math.floor(Date.now()/1000)
+            username: user.username
         }
 
         const {accessToken , refreshToken} = this.generateToken(payload)
@@ -47,24 +48,23 @@ export class AuthService {
 
     async refresh(refreshToken:string) : Promise<AuthTokens>{
         if(!refreshToken)
-            throw new Error("Refresh token is required")
+            throw new BadRequestError("Refresh token is required")
 
         let payload:Payload
         try{
             payload = jwt.verify(refreshToken , process.env.JWT_REFRESH_SECRET as string) as Payload
         } catch(err){
-            throw new Error("Invalid refresh token")
+            throw new UnauthorizedError("Invalid refresh token")
         }
         const user = await this.authRepository.findUserById(payload.userId)
         if(!user || !user.refreshToken)
-            throw new Error("Invalid refresh token")
+            throw new UnauthorizedError("Invalid refresh token")
         const matches = await bcrypt.compare(refreshToken , user.refreshToken)
         if(!matches)
-            throw new Error("Invalid refresh token")
+            throw new UnauthorizedError("Invalid refresh token")
         const newPayload : Payload = {
             userId : user.id.toString(),
-            username: user.username,
-            iat: Math.floor(Date.now()/1000)
+            username: user.username
         }
         const {accessToken , refreshToken : newRefreshToken } = this.generateToken(newPayload)
         const hashedRefreshToken = await bcrypt.hash(newRefreshToken , 20)
@@ -73,6 +73,9 @@ export class AuthService {
     }
 
     async logout(userId:string): Promise<void>{
+        const user = await this.authRepository.findUserById(userId)
+        if(!user)
+            throw new UnauthorizedError("User not found")
         await this.authRepository.clearRefreshToken(parseInt(userId))
     }
 
