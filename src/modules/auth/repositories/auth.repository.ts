@@ -19,4 +19,8 @@ export class AuthRepository {
     async updateRefreshToken(userId:number , refreshToken:string): Promise<void> {
         await User.update({ refreshToken }, { where: { id: userId } })
     }
+
+    async clearRefreshToken(userId:number):Promise<void>{
+        await User.update({refreshToken: null} , {where : {id:userId}})
+    }
 }

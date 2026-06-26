@@ -6,7 +6,6 @@ import { RegisterDTO , LoginDTO , AuthTokens , Payload } from '../types/auth.typ
 
 export class AuthService {
     private authRepository = new AuthRepository();
-    // we need here to do the 3 main functions: register , login , logout
 
     async register(data:RegisterDTO) : Promise <void>{
         const username = data.username
@@ -41,7 +40,8 @@ export class AuthService {
         }
 
         const {accessToken , refreshToken} = this.generateToken(payload)
-        await this.authRepository.updateRefreshToken(user.id , refreshToken)
+        const hashedRefreshToken = await bcrypt.hash(refreshToken , 20)
+        await this.authRepository.updateRefreshToken(user.id , hashedRefreshToken)
         return {accessToken , refreshToken}
     }
 
@@ -55,8 +55,11 @@ export class AuthService {
         } catch(err){
             throw new Error("Invalid refresh token")
         }
-        const user = await this.authRepository.findUs(payload.username)
-        if(!user || refreshToken !== user.refreshToken)
+        const user = await this.authRepository.findUserById(payload.userId)
+        if(!user || !user.refreshToken)
+            throw new Error("Invalid refresh token")
+        const matches = await bcrypt.compare(refreshToken , user.refreshToken)
+        if(!matches)
             throw new Error("Invalid refresh token")
         const newPayload : Payload = {
             userId : user.id.toString(),
@@ -64,8 +67,13 @@ export class AuthService {
             iat: Math.floor(Date.now()/1000)
         }
         const {accessToken , refreshToken : newRefreshToken } = this.generateToken(newPayload)
-        await this.authRepository.updateRefreshToken(user.id , newRefreshToken)
+        const hashedRefreshToken = await bcrypt.hash(newRefreshToken , 20)
+        await this.authRepository.updateRefreshToken(user.id , hashedRefreshToken)
         return {accessToken , refreshToken : newRefreshToken }
+    }
+
+    async logout(userId:string): Promise<void>{
+        await this.authRepository.clearRefreshToken(parseInt(userId))
     }
 
     private generateToken(payload:Payload) : AuthTokens{
