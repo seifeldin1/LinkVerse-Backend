@@ -5,7 +5,7 @@ export interface RegisterDTO{
 }
 
 export interface LoginDTO{
-    identifier: string; // can be either email or username
+    identifier: string; 
     password: string;
 }
 
@@ -21,6 +21,4 @@ export interface RefreshTokenDTO{
 export interface Payload{
     userId: string;
     username: string;
-    iat?: number; // issued at
-    exp?: number; // expiration time
 }
